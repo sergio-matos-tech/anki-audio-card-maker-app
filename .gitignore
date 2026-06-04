@@ -1,0 +1,8 @@
+# Ignore local raw data and audio files
+inputs/
+*.txt
+*.csv
+
+# Ignore OS-specific metadata
+Thumbs.db
+Desktop.ini
