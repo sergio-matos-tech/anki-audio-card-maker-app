@@ -1,5 +1,6 @@
 import os
 import queue
+import sys
 import threading
 
 import customtkinter as ctx
@@ -11,11 +12,17 @@ ctx.set_appearance_mode("System")
 ctx.set_default_color_theme("blue")
 
 
+def resource_path(relative_path: str) -> str:
+    base_path = getattr(sys, "_MEIPASS", os.path.abspath("."))
+    return os.path.join(base_path, relative_path)
+
+
 class AnkiAlignerApp(ctx.CTk):
     def __init__(self):
         super().__init__()
 
         self.title("Anki Audio Card Maker")
+        self._set_window_icon()
         self.geometry("680x520")
         self.resizable(False, False)
 
@@ -25,6 +32,12 @@ class AnkiAlignerApp(ctx.CTk):
 
         self._build_ui_layout()
         self.after(10, self._check_log_queue)
+
+    def _set_window_icon(self):
+        try:
+            self.iconbitmap(resource_path(os.path.join("assets", "app_icon.ico")))
+        except Exception:
+            pass
 
     def _build_ui_layout(self):
         self.title_label = ctx.CTkLabel(
