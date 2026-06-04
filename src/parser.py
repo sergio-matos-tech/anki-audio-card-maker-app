@@ -131,7 +131,8 @@ class TextParser:
 
         return english_score > 0 and english_score > portuguese_score
 
-    def _apply_auto_underscore(self, text: str, pv_name: str) -> str:
+    def _apply_en_formatting(self, text: str, pv_name: str) -> str:
+        """Identifies the inflected or separated English phrasal verb and applies <u><b> tags."""
         if not pv_name or " " not in pv_name: return text
             
         parts = pv_name.split(maxsplit=1)
@@ -160,9 +161,26 @@ class TextParser:
         verb_pattern = "|".join(forms)
         
         pattern = rf"\b({verb_pattern})\b[\w\s—’']{{0,30}}\b{particle}\b"
-        return re.sub(pattern, r'<u>\g<0></u>', text, flags=re.IGNORECASE)
+        return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
+
+    def _apply_pt_formatting(self, text: str, pv_name: str) -> str:
+        """Looks up the Portuguese translation variants via the Open-Closed Registry and applies <u><b> tags."""
+        if not pv_name: return text
+        
+        pt_registry = {
+            "DRINK UP": r"\b(beber\studo|bebeu\studo|beber\stodo|bebeu\stodo|beba\stodo|entorne\so\scopo|entornar\so\scopo|beber|bebeu|beba|entorne|entornar|bebeu\stodo)\b",
+            "WORK UP": r"\b(gerar|abriu|abremos|juntar|começou\sa\ssuar|abrir|ficado\scom|chegar\sa\ssuar|preparou|arrumar|progrediu)\b",
+            "PUT THROUGH": r"\b(colocados|passar\spor|submeter|enviar)\b"
+        }
+        
+        pattern = pt_registry.get(pv_name.upper())
+        if not pattern:
+            return text
+            
+        return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
 
     def extract_pairs(self) -> List[Tuple[str, str]]:
+        """Properly indented class method to compile unified sentence collections."""
         if not os.path.exists(self.search_dir):
             raise FileNotFoundError(f"Directory not found: {self.search_dir}")
 
@@ -179,13 +197,15 @@ class TextParser:
                 reader = PdfReader(file_path)
                 for page in reader.pages:
                     page_text = page.extract_text()
-                    if page_text: full_text += " " + page_text
+                    if page_text: 
+                        full_text += " " + page_text
             else:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     full_text = f.read()
 
             footer_match = re.search(r'(?i)(bons estudos|nosso site:)', full_text)
-            if footer_match: full_text = full_text[:footer_match.start()]
+            if footer_match: 
+                full_text = full_text[:footer_match.start()]
             full_text = re.sub(r'(?i)phrasal verb:\s*[a-z\s]+', '', full_text)
             full_text = re.sub(r'(www\.[^\s]+|https?://[^\s]+)', '', full_text)
 
@@ -202,7 +222,10 @@ class TextParser:
                     if current_pt:
                         english_txt = " ".join(current_en)
                         portuguese_txt = " ".join(current_pt)
-                        english_txt = self._apply_auto_underscore(english_txt, pv_name)
+                        
+                        english_txt = self._apply_en_formatting(english_txt, pv_name)
+                        portuguese_txt = self._apply_pt_formatting(portuguese_txt, pv_name)
+                        
                         pairs.append((english_txt, portuguese_txt))
                         current_en = []
                         current_pt = []
@@ -221,18 +244,23 @@ class TextParser:
                             re.match(r'^\d+\s*[-–—]', chunk) or
                             (chunk.startswith('(') and chunk.endswith(')'))
                         )
-                        if not is_noise: current_pt.append(chunk)
+                        if not is_noise: 
+                            current_pt.append(chunk)
                             
             if current_en and current_pt:
                 english_txt = " ".join(current_en)
                 portuguese_txt = " ".join(current_pt)
-                english_txt = self._apply_auto_underscore(english_txt, pv_name)
+                
+                english_txt = self._apply_en_formatting(english_txt, pv_name)
+                portuguese_txt = self._apply_pt_formatting(portuguese_txt, pv_name)
+                
                 pairs.append((english_txt, portuguese_txt))
                 
         return pairs
 
 
 class AnkiPackageGenerator:
+    """Binds text pairs and audio filenames together into an Anki-readable flashcard file."""
     def __init__(self, audio_repo: AudioRepository, text_parser: TextParser):
         self.audio_repo = audio_repo
         self.text_parser = text_parser
@@ -265,23 +293,18 @@ class AnkiPackageGenerator:
 if __name__ == "__main__":
     try:
         unified_input_dir = "./inputs"
-        
-        # Change this if your Anki profile uses a customized name
         ANKI_PROFILE_NAME = "User 1" 
         
         audio_repo = AudioRepository(search_dir=unified_input_dir)
         text_parser = TextParser(search_dir=unified_input_dir)
         
-        # Resolve target filename dynamically based on input document
         doc_files = [f for f in os.listdir(unified_input_dir) if f.lower().endswith(('.txt', '.pdf'))]
         pv_name = doc_files[0].split(" - ")[0].strip() if doc_files else "anki_import"
         dynamic_output_path = f"./{pv_name}.txt"
         
-        # Phase 1: Compile text anomalies and pairs
         generator = AnkiPackageGenerator(audio_repo, text_parser)
         active_audios = generator.generate_import_file(output_path=dynamic_output_path)
         
-        # Phase 2: Fire automation syncer to target local core media directories
         if active_audios:
             syncer = AnkiMediaSyncer(profile_name=ANKI_PROFILE_NAME)
             syncer.sync_audio_assets(source_dir=unified_input_dir, file_list=active_audios)
