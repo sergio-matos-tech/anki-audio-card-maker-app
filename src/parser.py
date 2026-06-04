@@ -1,48 +1,94 @@
 import os
 import re
+import platform
+import shutil
 from typing import List, Tuple
 from pypdf import PdfReader
 
 class AudioRepository:
-    """Gerencia a varredura, validação e ordenação dos arquivos de áudio pelo prefixo numérico."""
+    """Handles scanning, validating, and sorting audio files by their numeric prefix."""
     def __init__(self, search_dir: str):
         self.search_dir = search_dir
 
     def _get_numeric_prefix(self, filename: str) -> int:
-        """Extrai o número inicial de arquivos como '12 - Drink up...mp3'."""
         match = re.match(r'^(\d+)\s*-\s*', filename)
-        if match:
-            return int(match.group(1))
+        if match: return int(match.group(1))
         return float('inf')
 
     def get_sorted_audio_files(self) -> List[str]:
         if not os.path.exists(self.search_dir):
-            raise FileNotFoundError(f"Diretório não encontrado: {self.search_dir}")
+            raise FileNotFoundError(f"Directory not found: {self.search_dir}")
             
         files = []
         for f in os.listdir(self.search_dir):
             if f.lower().endswith('.mp3'):
-                # Ignora agressivamente o áudio completo que não possui numeração (retorna inf)
                 if self._get_numeric_prefix(f) != float('inf'):
                     files.append(f)
                     
         return sorted(files, key=self._get_numeric_prefix)
 
 
+class AnkiMediaSyncer:
+    """Detects the host OS, resolves the core collection.media path, and automates asset syncing."""
+    def __init__(self, profile_name: str = "User 1"):
+        self.profile_name = profile_name
+
+    def resolve_media_dir(self) -> str:
+        os_type = platform.system()
+        
+        if os_type == "Windows":
+            base_dir = os.path.expandvars(r"%APPDATA%\Anki2")
+        elif os_type == "Linux":
+            # Native installation path fallback to Flatpak path layout
+            native_path = os.path.expanduser("~/.local/share/Anki2")
+            flatpak_path = os.path.expanduser("~/.var/app/net.ankiweb.Anki/.local/share/Anki2")
+            base_dir = flatpak_path if not os.path.exists(native_path) and os.path.exists(flatpak_path) else native_path
+        elif os_type == "Darwin": # macOS support just in case
+            base_dir = os.path.expanduser("~/Library/Application Support/Anki2")
+        else:
+            return ""
+
+        return os.path.join(base_dir, self.profile_name, "collection.media")
+
+    def sync_audio_assets(self, source_dir: str, file_list: List[str]) -> bool:
+        try:
+            target_dir = self.resolve_media_dir()
+            
+            if not target_dir or not os.path.exists(target_dir):
+                print(f"\n[Warning] Anki target directory not found at: '{target_dir}'")
+                print("-> Skipping auto-copy. You will need to manually move the MP3 files to Anki's media folder.")
+                return False
+                
+            print(f"[Syncer] Target verified: {target_dir}")
+            copied_count = 0
+            
+            for filename in file_list:
+                source_path = os.path.join(source_dir, filename)
+                target_path = os.path.join(target_dir, filename)
+                
+                # Copying file keeping metadata intact; avoids re-copying if identical
+                if not os.path.exists(target_path):
+                    shutil.copy2(source_path, target_path)
+                    copied_count += 1
+                    
+            print(f"[Success] Successfully synced {copied_count} new audio assets directly to Anki.")
+            return True
+        except Exception as e:
+            print(f"[Warning] Media sync operation failed: {e}")
+            return False
+
+
 class TextParser:
-    """Extrai pares limpos de inglês-português aplicando Pré-Limpeza e Máquina de Estados."""
+    """Extracts clean English-Portuguese sentence pairs applying pre-filtering and a State Machine."""
     def __init__(self, search_dir: str):
         self.search_dir = search_dir
 
     def _is_english_sentence(self, text: str) -> bool:
-        """Heurística baseada em âncoras expandidas para alta precisão."""
         cleaned = text.strip()
-        if not cleaned or cleaned.startswith('---'): 
-            return False
+        if not cleaned or cleaned.startswith('---'): return False
 
         words = set(re.findall(r'\b[a-zà-ÿ́’\']+\b', cleaned.lower()))
-        if not words: 
-            return False
+        if not words: return False
 
         english_anchors = {
             'the', 'it', 'i', 'you', 'he', 'she', 'we', 'they', 'is', 'was', 'were', 
@@ -54,7 +100,7 @@ class TextParser:
             'here', 'there', 'who', 'what', 'where', 'when', 'why', 'how', 'do', 'did', 
             'does', 'make', 'made', 'get', 'got', 'take', 'took', 'come', 'came', 
             'say', 'said', 'know', 'knew', 'think', 'thought', 'see', 'saw', 'look', 
-            'want', 'give', 'gave', 'use', 'find', 'tell', 'ask', 'asked', 'work', 'seem', 
+            'want', 'give', 'gave', 'use', 'find', 'tell', 'ask', 'work', 'seem', 
             'feel', 'try', 'leave', 'call', 'drink', 'drank', 'okay', 'yes', 'no', 
             'let', 'lets', 'dear', 'kid', 'boy', 'girl', 'time', 'home', 'back', 
             'just', 'only', 'much', 'many', 'very', 'too', 'also', 'well', 'way', 
@@ -83,64 +129,85 @@ class TextParser:
         english_score = len(words.intersection(english_anchors))
         portuguese_score = len(words.intersection(portuguese_anchors))
 
-        # A pontuação de inglês agora deve ser ESTRITAMENTE maior para evitar falsos positivos
         return english_score > 0 and english_score > portuguese_score
+
+    def _apply_auto_underscore(self, text: str, pv_name: str) -> str:
+        if not pv_name or " " not in pv_name: return text
+            
+        parts = pv_name.split(maxsplit=1)
+        verb_base = parts[0].lower()
+        particle = parts[1].lower()
+        
+        inflections = {
+            "drink": ["drink", "drank", "drunk", "drinking", "drinks"],
+            "work": ["work", "worked", "working", "works"],
+            "break": ["break", "broke", "broken", "breaking", "breaks"],
+            "call": ["call", "called", "calling", "calls"],
+            "carry": ["carry", "carried", "carrying", "carries"],
+            "get": ["get", "got", "gotten", "getting", "gets"],
+            "give": ["give", "gave", "given", "giving", "gives"],
+            "go": ["go", "went", "gone", "going", "goes"],
+            "keep": ["keep", "kept", "keeping", "keeps"],
+            "look": ["look", "looked", "looking", "looks"],
+            "make": ["make", "made", "making", "makes"],
+            "put": ["put", "putting", "puts"],
+            "run": ["run", "ran", "running", "runs"],
+            "take": ["take", "took", "taken", "taking", "takes"],
+            "turn": ["turn", "turned", "turning", "turns"],
+        }
+        
+        forms = inflections.get(verb_base, [verb_base, verb_base + "ed", verb_base + "ing", verb_base + "s"])
+        verb_pattern = "|".join(forms)
+        
+        pattern = rf"\b({verb_pattern})\b[\w\s—’']{{0,30}}\b{particle}\b"
+        return re.sub(pattern, r'<u>\g<0></u>', text, flags=re.IGNORECASE)
 
     def extract_pairs(self) -> List[Tuple[str, str]]:
         if not os.path.exists(self.search_dir):
-            raise FileNotFoundError(f"Diretório não encontrado: {self.search_dir}")
+            raise FileNotFoundError(f"Directory not found: {self.search_dir}")
 
         pairs = []
         files = [f for f in os.listdir(self.search_dir) if f.lower().endswith(('.txt', '.pdf'))]
         
         for filename in sorted(files):
+            pv_name = filename.split(" - ")[0].strip() if " - " in filename else ""
             file_path = os.path.join(self.search_dir, filename)
-            raw_lines = []
+            full_text = ""
 
             if filename.lower().endswith('.pdf'):
-                print(f"[Processor] Lendo documento PDF: {filename}")
+                print(f"[Processor] Reading PDF document: {filename}")
                 reader = PdfReader(file_path)
                 for page in reader.pages:
                     page_text = page.extract_text()
-                    if page_text:
-                        raw_lines.extend(page_text.split('\n'))
+                    if page_text: full_text += " " + page_text
             else:
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    raw_lines = f.readlines()
+                    full_text = f.read()
 
-            # FASE 1: Concatenação Segura
-            full_text = " ".join([line.strip() for line in raw_lines if line.strip()])
-            
-            # Corta o rodapé final inteiro de forma segura (evita quebrar a página toda)
             footer_match = re.search(r'(?i)(bons estudos|nosso site:)', full_text)
-            if footer_match:
-                full_text = full_text[:footer_match.start()]
-                
-            # Remove cabeçalhos iniciais tipo "Phrasal Verb: DRINK UP"
+            if footer_match: full_text = full_text[:footer_match.start()]
             full_text = re.sub(r'(?i)phrasal verb:\s*[a-z\s]+', '', full_text)
-            
-            # Limpeza cirúrgica de URLs que possam ter vazado
             full_text = re.sub(r'(www\.[^\s]+|https?://[^\s]+)', '', full_text)
 
-            # FASE 2: Segmentação Segura por Pontuação
             sanitized_text = re.sub(r'([.!?:][)"’]?)([A-Za-zÀ-ÿ(])', r'\1 \2', full_text)
             normalized_text = re.sub(r'\s+', ' ', sanitized_text)
             split_text = re.sub(r'([.!?:][)"’]?)\s+', r'\1<SPLIT>', normalized_text)
             chunks = [c.strip() for c in split_text.split('<SPLIT>') if c.strip()]
 
-            # FASE 3: Máquina de Estados (Agrupamento Contínuo)
             current_en = []
             current_pt = []
             
             for chunk in chunks:
                 if self._is_english_sentence(chunk):
                     if current_pt:
-                        pairs.append((" ".join(current_en), " ".join(current_pt)))
+                        english_txt = " ".join(current_en)
+                        portuguese_txt = " ".join(current_pt)
+                        english_txt = self._apply_auto_underscore(english_txt, pv_name)
+                        pairs.append((english_txt, portuguese_txt))
                         current_en = []
                         current_pt = []
                     current_en.append(chunk)
                 else:
-                    # Filtra apenas o ruído em português (Ex: "2 - Agora, veja...")
                     if current_en:
                         is_noise = (
                             "mairovergara" in chunk.lower() or 
@@ -154,35 +221,32 @@ class TextParser:
                             re.match(r'^\d+\s*[-–—]', chunk) or
                             (chunk.startswith('(') and chunk.endswith(')'))
                         )
-                        if not is_noise:
-                            current_pt.append(chunk)
+                        if not is_noise: current_pt.append(chunk)
                             
-            # Garante a extração do último par
             if current_en and current_pt:
-                pairs.append((" ".join(current_en), " ".join(current_pt)))
+                english_txt = " ".join(current_en)
+                portuguese_txt = " ".join(current_pt)
+                english_txt = self._apply_auto_underscore(english_txt, pv_name)
+                pairs.append((english_txt, portuguese_txt))
                 
         return pairs
 
 
 class AnkiPackageGenerator:
-    """Une os pares de texto e os nomes de arquivos de áudio em um arquivo final para o Anki."""
     def __init__(self, audio_repo: AudioRepository, text_parser: TextParser):
         self.audio_repo = audio_repo
         self.text_parser = text_parser
 
-    def generate_import_file(self, output_path: str):
+    def generate_import_file(self, output_path: str) -> List[str]:
         audio_files = self.audio_repo.get_sorted_audio_files()
         text_pairs = self.text_parser.extract_pairs()
 
         if not text_pairs:
-            print("[Error] Nenhum par de texto foi extraído. Verifique os arquivos.")
-            return
-
-        if len(audio_files) != len(text_pairs):
-            print(f"\n[Warning] Incompatibilidade detectada! Encontrados {len(audio_files)} áudios e {len(text_pairs)} pares de texto.")
-            print("Alinhando pelo menor número comum para evitar dessincronização.\n")
+            print("[Error] No text pairs were successfully extracted.")
+            return []
 
         total_cards = min(len(audio_files), len(text_pairs))
+        used_audio_files = []
         
         with open(output_path, 'w', encoding='utf-8') as out_file:
             for idx in range(total_cards):
@@ -191,20 +255,36 @@ class AnkiPackageGenerator:
                 
                 front_field = f"{english}[sound:{audio_filename}]"
                 back_field = portuguese
-                
                 out_file.write(f"{front_field}\t{back_field}\n")
+                used_audio_files.append(audio_filename)
                 
-        print(f"[Success] Concluído! Gerados {total_cards} cards dentro de '{output_path}'")
+        print(f"[Success] Generated structured mapping file inside '{output_path}'")
+        return used_audio_files
 
 
 if __name__ == "__main__":
     try:
         unified_input_dir = "./inputs"
+        
+        # Change this if your Anki profile uses a customized name
+        ANKI_PROFILE_NAME = "User 1" 
+        
         audio_repo = AudioRepository(search_dir=unified_input_dir)
         text_parser = TextParser(search_dir=unified_input_dir)
         
-        generator = AnkiPackageGenerator(audio_repo, text_parser)
-        generator.generate_import_file(output_path="./anki_import.txt")
+        # Resolve target filename dynamically based on input document
+        doc_files = [f for f in os.listdir(unified_input_dir) if f.lower().endswith(('.txt', '.pdf'))]
+        pv_name = doc_files[0].split(" - ")[0].strip() if doc_files else "anki_import"
+        dynamic_output_path = f"./{pv_name}.txt"
         
+        # Phase 1: Compile text anomalies and pairs
+        generator = AnkiPackageGenerator(audio_repo, text_parser)
+        active_audios = generator.generate_import_file(output_path=dynamic_output_path)
+        
+        # Phase 2: Fire automation syncer to target local core media directories
+        if active_audios:
+            syncer = AnkiMediaSyncer(profile_name=ANKI_PROFILE_NAME)
+            syncer.sync_audio_assets(source_dir=unified_input_dir, file_list=active_audios)
+            
     except Exception as e:
-        print(f"[Error] Falha na execução: {e}")
+        print(f"[Error] Execution failed: {e}")
