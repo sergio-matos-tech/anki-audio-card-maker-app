@@ -46,8 +46,8 @@ class TestUIIntegration(unittest.TestCase):
         banner_text = self.app.status_banner.cget("text")
         banner_color = self.app.status_banner.cget("fg_color")
         
-        self.assertIn("SUCCESS", banner_text)
-        self.assertIn("NEXT STEP", banner_text)
+        self.assertIn("Done", banner_text)
+        self.assertIn("import the TXT file", banner_text)
         self.assertEqual(banner_color, "#10b981")
         
         self.assertIn("[Saved] Anki import file compiled successfully", console_output)
