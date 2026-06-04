@@ -1,3 +1,6 @@
+# Ignore local virtual environment
+.venv/
+
 # Ignore local raw data and audio files
 inputs/
 *.txt
