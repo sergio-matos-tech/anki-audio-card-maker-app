@@ -6,6 +6,9 @@ inputs/
 *.txt
 *.csv
 
+# Ignore PyInstaller intermediate build files
+build/
+
 # Ignore OS-specific metadata
 Thumbs.db
 Desktop.ini
