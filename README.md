@@ -1,5 +1,8 @@
 # Anki Audio Card Maker
 
+<img width="703" height="570" alt="image" src="https://github.com/user-attachments/assets/aca91911-11e8-4ebf-a589-aef5de9a1cbd" />
+
+
 Beta Windows app for turning bilingual lesson files and numbered MP3 files into Anki cards with audio.
 
 This is an early beta. Right now it is focused on Windows users and lessons with English sentences, Portuguese translations, and matching numbered audio files.
@@ -38,6 +41,9 @@ dist/AnkiAudioCardMaker.exe
 ```
 
 Open the app, choose your lesson folder, create the import file, then import that `.txt` file into Anki.
+
+<img width="703" height="567" alt="image" src="https://github.com/user-attachments/assets/adc4fbd8-dac6-4482-902f-04896ad74f99" />
+
 
 See [GUIDE.md](GUIDE.md) for the simple user guide.
 
