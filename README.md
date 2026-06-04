@@ -1,12 +1,21 @@
-# Anki Stream Aligner
+# Anki Audio Card Maker
 
-Anki Stream Aligner turns bilingual lesson text and matching MP3 files into an Anki import file with synchronized audio.
+Beta Windows app for turning bilingual lesson files and numbered MP3 files into Anki cards with audio.
 
-The app is built for lessons that have:
+This is an early beta. Right now it is focused on Windows users and lessons with English sentences, Portuguese translations, and matching numbered audio files.
 
-- One `.pdf` or `.txt` file with English sentences and Portuguese translations
-- Numbered `.mp3` files for the same sentences
-- Audio files that start at `1` and follow the lesson order
+## What It Does
+
+- Reads one `.pdf` or `.txt` lesson file
+- Finds English and Portuguese sentence pairs
+- Matches each card to the correct numbered `.mp3` file
+- Creates a tab-separated `.txt` file for Anki
+- Copies the used MP3 files into your Anki media folder
+- Highlights some recognized phrasal verbs
+
+## Lesson Folder
+
+Put the lesson document and audio files in the same folder.
 
 Example:
 
@@ -18,54 +27,19 @@ Lesson Folder/
   3 - track.mp3
 ```
 
-## What It Does
-
-- Finds bilingual sentence pairs in the lesson document
-- Matches each card to the correct numbered audio file
-- Creates a tab-separated `.txt` file that Anki can import
-- Copies the used audio files into your Anki media folder
-- Highlights the target phrasal verb when the parser recognizes it
-
-The generated file looks like this:
-
-```text
-She drank up all the milk. [sound:1 - track.mp3]	Ela bebeu todo o leite.
-The children drank up the juice. [sound:2 - track.mp3]	As criancas beberam todo o suco.
-```
+The audio files must start at `1` and follow the same order as the sentences in the lesson.
 
 ## Download
 
-For normal use, download the Windows executable from:
+For normal use on Windows, download the beta executable from:
 
 ```text
-dist/AnkiStreamAligner.exe
+dist/AnkiAudioCardMaker.exe
 ```
 
-Run the executable, choose your lesson folder, and import the generated `.txt` file into Anki.
+Open the app, choose your lesson folder, create the import file, then import that `.txt` file into Anki.
 
-See [GUIDE.md](GUIDE.md) for the full user guide.
-
-## Run From Source
-
-If you want to run the Python version:
-
-```powershell
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt customtkinter
-python -m src.ui
-```
-
-## Build The Executable
-
-The project uses PyInstaller and keeps the `.spec` file in the repo:
-
-```powershell
-pip install pyinstaller
-pyinstaller AnkiStreamAligner.spec
-```
-
-`dist/` contains the user-facing executable. `build/` is only a temporary PyInstaller folder and is ignored by Git.
+See [GUIDE.md](GUIDE.md) for the simple user guide.
 
 ## Import Into Anki
 
@@ -79,3 +53,25 @@ After the app creates the import file:
 6. Import the notes.
 
 The audio should play because the app copies the selected MP3 files into Anki's media folder.
+
+## Run From Source
+
+If you want to run the Python version on Windows:
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+python -m src.ui
+```
+
+## Build The Executable
+
+The project uses PyInstaller and keeps the `.spec` file in the repo:
+
+```powershell
+pip install pyinstaller
+pyinstaller AnkiStreamAligner.spec
+```
+
+The executable is created in `dist/`. The `build/` folder is only temporary PyInstaller output and is ignored by Git.

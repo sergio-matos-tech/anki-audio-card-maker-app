@@ -4,10 +4,15 @@
 # Ignore local raw data and audio files
 inputs/
 *.txt
+!requirements.txt
 *.csv
 
 # Ignore PyInstaller intermediate build files
 build/
+
+# Ignore Python cache files
+__pycache__/
+*.py[cod]
 
 # Ignore OS-specific metadata
 Thumbs.db
