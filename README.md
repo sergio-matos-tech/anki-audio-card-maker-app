@@ -1,326 +1,81 @@
-# Anki Media Stream Aligner (AnkiStreamAligner)
+# Anki Stream Aligner
 
-Automatically converts bilingual lesson material and matching audio files into Anki-ready flashcards with perfectly synchronized audio.
+Anki Stream Aligner turns bilingual lesson text and matching MP3 files into an Anki import file with synchronized audio.
 
----
+The app is built for lessons that have:
 
-## Overview
-
-When studying a foreign language, high-quality flashcards with synchronized audio can significantly improve retention and listening comprehension.
-
-Unfortunately, creating those cards manually is often tedious:
-
-* PDFs contain headers, footers, advertisements, and URLs.
-* Lesson content is frequently mixed with formatting noise.
-* Audio files are stored separately.
-* Small parsing mistakes can desynchronize the entire deck.
-
-Anki Media Stream Aligner automates this workflow by extracting bilingual sentence pairs, preserving audio alignment, and generating files ready for direct import into Anki.
-
----
-
-## Features
-
-* Extracts bilingual sentence pairs from PDF and TXT documents
-* Removes URLs, headers, and document noise
-* Preserves sentence-to-audio synchronization
-* Automatically copies audio files to Anki's media directory
-* Generates Anki-compatible tab-separated files
-* Supports Windows and Linux
-* Thread-safe background processing
-* GUI-based workflow
-* Automated integration testing
-
----
-
-## Why This Exists
-
-Traditional parsing scripts often process lesson content line by line.
-
-This creates a common failure mode:
-
-### Example
-
-Document:
-
-```text
-She ran up a massive bill. Ela acumulou uma conta enorme.
-```
-
-A naive parser may incorrectly split this into multiple cards.
-
-Once that happens:
-
-| Card | Audio   |
-| ---- | ------- |
-| 1    | Audio 1 |
-| 2    | Audio 2 |
-| 3    | Audio 4 |
-| 4    | Audio 5 |
-
-The entire deck becomes desynchronized.
-
-Anki Media Stream Aligner guarantees:
-
-```text
-Sentence N → Audio N
-```
-
-throughout the entire import pipeline.
-
----
-
-## Example
-
-### Input Document
-
-```text
-She drank up all the milk.
-Ela bebeu todo o leite.
-
-The children drank up the juice.
-As crianças beberam todo o suco.
-```
-
-### Input Audio Files
-
-```text
-1 - track.mp3
-2 - track.mp3
-```
-
-### Generated Output
-
-```text
-She drank up all the milk. [sound:1.mp3]	Ela bebeu todo o leite.
-The children drank up the juice. [sound:2.mp3]	As crianças beberam todo o suco.
-```
-
-The output is immediately compatible with Anki's import system.
-
----
-
-## Installation
-
-### Clone the Repository
-
-```bash
-git clone https://github.com/your-username/AnkiMediaStreamAligner.git
-cd AnkiMediaStreamAligner
-```
-
-### Create a Virtual Environment
-
-```bash
-python -m venv .venv
-```
-
-### Activate the Environment
-
-#### Windows
-
-```powershell
-.venv\Scripts\activate
-```
-
-#### Linux
-
-```bash
-source .venv/bin/activate
-```
-
-### Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
----
-
-## Expected Input Structure
-
-Place your lesson document and matching audio files inside the same folder.
-
-```text
-Lesson Folder/
-│
-├── DRINK UP - Full Lesson.pdf
-├── 1 - track.mp3
-├── 2 - track.mp3
-├── 3 - track.mp3
-└── ...
-```
-
-### Requirements
-
-* One PDF or TXT file containing bilingual lesson content
-* Sequentially numbered MP3 files
-* Audio numbering must begin at 1
-
----
-
-## Usage
-
-### Launch the Application
-
-```bash
-python -m src.ui
-```
-
-### Configure the Application
-
-#### Anki Profile Name
-
-Enter your Anki profile name.
-
-Default:
-
-```text
-User 1
-```
-
-The application will automatically locate the corresponding Anki media folder.
-
-#### Select Source Folder
-
-Choose the folder containing:
-
-* Lesson PDF/TXT
-* MP3 files
-
----
-
-## Generate and Synchronize Assets
-
-Click:
-
-```text
-⚡ GENERATE & SYNC ASSETS
-```
-
-The application will:
-
-1. Parse the lesson document
-2. Extract bilingual sentence pairs
-3. Preserve sentence-to-audio alignment
-4. Generate an Anki-compatible TXT file
-5. Automatically copy audio files into Anki's media directory
-6. Open a save dialog for the generated file
-
-Example output filename:
-
-```text
-DRINK UP.txt
-```
-
----
-
-## Importing into Anki
-
-Once the file has been generated:
-
-1. Open Anki
-2. Click **Import File**
-3. Select the generated TXT file
-
-### Import Settings
-
-| Setting             | Value                              |
-| ------------------- | ---------------------------------- |
-| Note Type           | Basic (Básico) or custom note type |
-| Target Deck         | Any deck of your choice            |
-| Fields separated by | Tab (Tabulação)                    |
-
-### Field Mapping
-
-| Input Field | Anki Field |
-| ----------- | ---------- |
-| Field 1     | Front      |
-| Field 2     | Back       |
-
-### Front Side
-
-Contains:
-
-* English sentence
-* Automatic keyword highlighting
-* Audio reference
+- One `.pdf` or `.txt` file with English sentences and Portuguese translations
+- Numbered `.mp3` files for the same sentences
+- Audio files that start at `1` and follow the lesson order
 
 Example:
 
 ```text
-She drank up all the milk. [sound:1.mp3]
+Lesson Folder/
+  DRINK UP - Full Lesson.pdf
+  1 - track.mp3
+  2 - track.mp3
+  3 - track.mp3
 ```
 
-### Back Side
+## What It Does
 
-Contains:
+- Finds bilingual sentence pairs in the lesson document
+- Matches each card to the correct numbered audio file
+- Creates a tab-separated `.txt` file that Anki can import
+- Copies the used audio files into your Anki media folder
+- Highlights the target phrasal verb when the parser recognizes it
 
-* Portuguese translation
-* Noise-free content
-* No URLs
-* No document artifacts
+The generated file looks like this:
 
-Click **Import** to finish.
+```text
+She drank up all the milk. [sound:1 - track.mp3]	Ela bebeu todo o leite.
+The children drank up the juice. [sound:2 - track.mp3]	As criancas beberam todo o suco.
+```
 
----
+## Download
 
-## Technical Architecture
+For normal use, download the Windows executable from:
 
-### Design Principles
+```text
+dist/AnkiStreamAligner.exe
+```
 
-The application follows a decoupled architecture designed for maintainability and testability.
+Run the executable, choose your lesson folder, and import the generated `.txt` file into Anki.
 
-### Core Components
+See [GUIDE.md](GUIDE.md) for the full user guide.
 
-* Parser Engine
-* Sentence Alignment Engine
-* Audio Synchronizer
-* Anki Media Resolver
-* GUI Layer
+## Run From Source
 
-### Thread-Safe Processing
+If you want to run the Python version:
 
-Heavy operations execute on background worker threads.
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt customtkinter
+python -m src.ui
+```
 
-Communication with the user interface occurs through a thread-safe message queue, ensuring:
+## Build The Executable
 
-* Responsive UI
-* Safe concurrency
-* Predictable execution flow
+The project uses PyInstaller and keeps the `.spec` file in the repo:
 
-### Testing
+```powershell
+pip install pyinstaller
+pyinstaller AnkiStreamAligner.spec
+```
 
-The project includes automated end-to-end tests using:
+`dist/` contains the user-facing executable. `build/` is only a temporary PyInstaller folder and is ignored by Git.
 
-* Temporary file systems
-* Mocked components
-* Integration test suites
+## Import Into Anki
 
-This helps prevent regressions and ensures stable behavior across releases.
+After the app creates the import file:
 
----
+1. Open Anki.
+2. Click `Import File`.
+3. Select the generated `.txt` file.
+4. Use `Tab` as the field separator.
+5. Map field 1 to the front and field 2 to the back.
+6. Import the notes.
 
-## Roadmap
-
-* [ ] macOS support
-* [ ] Direct AnkiConnect integration
-* [ ] Batch lesson processing
-* [ ] Deck creation automation
-* [ ] Drag-and-drop folder support
-* [ ] Processing statistics dashboard
-* [ ] Automatic deck import
-
----
-
-## Contributing
-
-Contributions, bug reports, and feature requests are welcome.
-
-Feel free to open an issue or submit a pull request.
-
----
-
-## License
-
-MIT License
+The audio should play because the app copies the selected MP3 files into Anki's media folder.
