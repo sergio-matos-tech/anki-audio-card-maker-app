@@ -4,12 +4,12 @@ from typing import List, Tuple
 from pypdf import PdfReader
 
 class AudioRepository:
-    """Handles scanning, validating, and sorting audio files by their numeric prefix."""
+    """Gerencia a varredura, validação e ordenação dos arquivos de áudio pelo prefixo numérico."""
     def __init__(self, search_dir: str):
         self.search_dir = search_dir
 
     def _get_numeric_prefix(self, filename: str) -> int:
-        """Extracts the leading number from filenames like '12 - Drink up...mp3'."""
+        """Extrai o número inicial de arquivos como '12 - Drink up...mp3'."""
         match = re.match(r'^(\d+)\s*-\s*', filename)
         if match:
             return int(match.group(1))
@@ -17,28 +17,31 @@ class AudioRepository:
 
     def get_sorted_audio_files(self) -> List[str]:
         if not os.path.exists(self.search_dir):
-            raise FileNotFoundError(f"Directory not found: {self.search_dir}")
+            raise FileNotFoundError(f"Diretório não encontrado: {self.search_dir}")
             
-        # Scan the unified directory specifically for MP3 files
-        files = [f for f in os.listdir(self.search_dir) if f.lower().endswith('.mp3')]
+        files = []
+        for f in os.listdir(self.search_dir):
+            if f.lower().endswith('.mp3'):
+                # Ignora agressivamente o áudio completo que não possui numeração (retorna inf)
+                if self._get_numeric_prefix(f) != float('inf'):
+                    files.append(f)
+                    
         return sorted(files, key=self._get_numeric_prefix)
 
 
 class TextParser:
-    """Handles extracting clean English-Portuguese sentence pairs from TXT or PDF source files."""
+    """Extrai pares limpos de inglês-português aplicando Pré-Limpeza e Máquina de Estados."""
     def __init__(self, search_dir: str):
         self.search_dir = search_dir
 
     def _is_english_sentence(self, text: str) -> bool:
-        """Differentiates English example sentences from translations using keyword intersections."""
+        """Heurística baseada em âncoras expandidas para alta precisão."""
         cleaned = text.strip()
-        if not cleaned or cleaned.startswith('---') or cleaned.startswith('('):
-            return False
-        if re.match(r'^\d+', cleaned) or "mairovergara" in cleaned.lower():
+        if not cleaned or cleaned.startswith('---'): 
             return False
 
         words = set(re.findall(r'\b[a-zà-ÿ́’\']+\b', cleaned.lower()))
-        if not words:
+        if not words: 
             return False
 
         english_anchors = {
@@ -46,7 +49,16 @@ class TextParser:
             'can', 'cant', 'could', 'would', 'should', 'have', 'has', 'had', 'for', 
             'to', 'of', 'in', 'on', 'at', 'with', 'this', 'that', 'my', 'your', 
             'his', 'her', 'their', 'our', 'always', 'never', 'but', 'and', 'any', 
-            'some', 'all', 'dont', 'doesnt', 'didnt', 'not', 'are', 'am', 'go', 'went', 'going'
+            'some', 'all', 'dont', 'doesnt', 'didnt', 'not', 'are', 'am', 'go', 'went', 
+            'going', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'now', 
+            'here', 'there', 'who', 'what', 'where', 'when', 'why', 'how', 'do', 'did', 
+            'does', 'make', 'made', 'get', 'got', 'take', 'took', 'come', 'came', 
+            'say', 'said', 'know', 'knew', 'think', 'thought', 'see', 'saw', 'look', 
+            'want', 'give', 'gave', 'use', 'find', 'tell', 'ask', 'asked', 'work', 'seem', 
+            'feel', 'try', 'leave', 'call', 'drink', 'drank', 'okay', 'yes', 'no', 
+            'let', 'lets', 'dear', 'kid', 'boy', 'girl', 'time', 'home', 'back', 
+            'just', 'only', 'much', 'many', 'very', 'too', 'also', 'well', 'way', 
+            'even', 'new', 'good', 'bad', 'great', 'right', 'really', 'us', 'ill', 'turn', 'once', 'more'
         }
         
         portuguese_anchors = {
@@ -55,63 +67,105 @@ class TextParser:
             'não', 'nao', 'mas', 'ele', 'ela', 'você', 'voce', 'nós', 'nos', 'eles', 
             'elas', 'me', 'se', 'ao', 'aos', 'que', 'como', 'foi', 'fomos', 'são', 
             'sao', 'é', 'ou', 'já', 'ja', 'bem', 'muito', 'esta', 'está', 'estava', 
-            'pelo', 'pela', 'pelos', 'pelas', 'num', 'numa'
+            'pelo', 'pela', 'pelos', 'pelas', 'num', 'numa', 'eu', 'tu', 'meu', 
+            'minha', 'meus', 'minhas', 'teu', 'tua', 'seu', 'sua', 'seus', 'suas', 
+            'nosso', 'nossa', 'este', 'esse', 'essa', 'isso', 'isto', 'aquilo', 
+            'aquele', 'aquela', 'qual', 'quais', 'quem', 'tudo', 'nada', 'algo', 
+            'alguém', 'alguem', 'nenhum', 'nenhuma', 'cada', 'qualquer', 'ser', 
+            'estar', 'ter', 'haver', 'fazer', 'ir', 'poder', 'dizer', 'saber', 'querer', 
+            'ficar', 'ver', 'dar', 'achar', 'passar', 'dever', 'chegar', 'falar', 
+            'deixar', 'encontrar', 'levar', 'começar', 'partir', 'parecer', 'olhar', 
+            'aqui', 'ali', 'lá', 'cá', 'hoje', 'ontem', 'amanhã', 'agora', 'depois', 
+            'antes', 'sempre', 'nunca', 'quase', 'talvez', 'sim', 'certeza', 'vez',
+            'significando', 'copo', 'veja'
         }
 
         english_score = len(words.intersection(english_anchors))
         portuguese_score = len(words.intersection(portuguese_anchors))
 
-        return english_score > 0 and english_score >= portuguese_score
+        # A pontuação de inglês agora deve ser ESTRITAMENTE maior para evitar falsos positivos
+        return english_score > 0 and english_score > portuguese_score
 
     def extract_pairs(self) -> List[Tuple[str, str]]:
         if not os.path.exists(self.search_dir):
-            raise FileNotFoundError(f"Directory not found: {self.search_dir}")
+            raise FileNotFoundError(f"Diretório não encontrado: {self.search_dir}")
 
         pairs = []
-        # Scan the unified directory specifically for document types
         files = [f for f in os.listdir(self.search_dir) if f.lower().endswith(('.txt', '.pdf'))]
         
         for filename in sorted(files):
             file_path = os.path.join(self.search_dir, filename)
-            lines = []
+            raw_lines = []
 
             if filename.lower().endswith('.pdf'):
-                print(f"[Processor] Reading PDF document: {filename}")
+                print(f"[Processor] Lendo documento PDF: {filename}")
                 reader = PdfReader(file_path)
                 for page in reader.pages:
                     page_text = page.extract_text()
                     if page_text:
-                        lines.extend([line.strip() for line in page_text.split('\n') if line.strip()])
+                        raw_lines.extend(page_text.split('\n'))
             else:
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    lines = [line.strip() for line in f.readlines() if line.strip()]
+                    raw_lines = f.readlines()
 
-            i = 0
-            while i < len(lines):
-                current_line = lines[i]
+            # FASE 1: Concatenação Segura
+            full_text = " ".join([line.strip() for line in raw_lines if line.strip()])
+            
+            # Corta o rodapé final inteiro de forma segura (evita quebrar a página toda)
+            footer_match = re.search(r'(?i)(bons estudos|nosso site:)', full_text)
+            if footer_match:
+                full_text = full_text[:footer_match.start()]
                 
-                if self._is_english_sentence(current_line):
-                    translation_parts = []
-                    next_idx = i + 1
-                    
-                    while next_idx < len(lines) and not self._is_english_sentence(lines[next_idx]):
-                        cleaned_next = lines[next_idx].strip()
-                        if "conheça mais" in cleaned_next.lower() or "www." in cleaned_next.lower() or re.match(r'^\d+', cleaned_next):
-                            break
-                        translation_parts.append(cleaned_next)
-                        next_idx += 1
-                    
-                    if translation_parts:
-                        portuguese_txt = " ".join(translation_parts)
-                        pairs.append((current_line, portuguese_txt))
-                        i = next_idx
-                        continue
-                i += 1
+            # Remove cabeçalhos iniciais tipo "Phrasal Verb: DRINK UP"
+            full_text = re.sub(r'(?i)phrasal verb:\s*[a-z\s]+', '', full_text)
+            
+            # Limpeza cirúrgica de URLs que possam ter vazado
+            full_text = re.sub(r'(www\.[^\s]+|https?://[^\s]+)', '', full_text)
+
+            # FASE 2: Segmentação Segura por Pontuação
+            sanitized_text = re.sub(r'([.!?:][)"’]?)([A-Za-zÀ-ÿ(])', r'\1 \2', full_text)
+            normalized_text = re.sub(r'\s+', ' ', sanitized_text)
+            split_text = re.sub(r'([.!?:][)"’]?)\s+', r'\1<SPLIT>', normalized_text)
+            chunks = [c.strip() for c in split_text.split('<SPLIT>') if c.strip()]
+
+            # FASE 3: Máquina de Estados (Agrupamento Contínuo)
+            current_en = []
+            current_pt = []
+            
+            for chunk in chunks:
+                if self._is_english_sentence(chunk):
+                    if current_pt:
+                        pairs.append((" ".join(current_en), " ".join(current_pt)))
+                        current_en = []
+                        current_pt = []
+                    current_en.append(chunk)
+                else:
+                    # Filtra apenas o ruído em português (Ex: "2 - Agora, veja...")
+                    if current_en:
+                        is_noise = (
+                            "mairovergara" in chunk.lower() or 
+                            "conheça mais" in chunk.lower() or
+                            "leia o post" in chunk.lower() or
+                            "nosso site" in chunk.lower() or
+                            "youtube" in chunk.lower() or
+                            "aprenda inglês" in chunk.lower() or
+                            "facebook" in chunk.lower() or
+                            "linkedin" in chunk.lower() or
+                            re.match(r'^\d+\s*[-–—]', chunk) or
+                            (chunk.startswith('(') and chunk.endswith(')'))
+                        )
+                        if not is_noise:
+                            current_pt.append(chunk)
+                            
+            # Garante a extração do último par
+            if current_en and current_pt:
+                pairs.append((" ".join(current_en), " ".join(current_pt)))
+                
         return pairs
 
 
 class AnkiPackageGenerator:
-    """Binds text pairs and audio filenames together into an Anki-readable flashcard file."""
+    """Une os pares de texto e os nomes de arquivos de áudio em um arquivo final para o Anki."""
     def __init__(self, audio_repo: AudioRepository, text_parser: TextParser):
         self.audio_repo = audio_repo
         self.text_parser = text_parser
@@ -121,12 +175,12 @@ class AnkiPackageGenerator:
         text_pairs = self.text_parser.extract_pairs()
 
         if not text_pairs:
-            print("[Error] No text pairs were successfully extracted. Check your input files.")
+            print("[Error] Nenhum par de texto foi extraído. Verifique os arquivos.")
             return
 
         if len(audio_files) != len(text_pairs):
-            print(f"\n[Warning] Mismatch detected! Found {len(audio_files)} audio files and {len(text_pairs)} text pairs.")
-            print("Proceeding with the smaller count to preserve sequential alignment.\n")
+            print(f"\n[Warning] Incompatibilidade detectada! Encontrados {len(audio_files)} áudios e {len(text_pairs)} pares de texto.")
+            print("Alinhando pelo menor número comum para evitar dessincronização.\n")
 
         total_cards = min(len(audio_files), len(text_pairs))
         
@@ -140,13 +194,12 @@ class AnkiPackageGenerator:
                 
                 out_file.write(f"{front_field}\t{back_field}\n")
                 
-        print(f"[Success] Generated {total_cards} cards inside '{output_path}'")
+        print(f"[Success] Concluído! Gerados {total_cards} cards dentro de '{output_path}'")
 
 
 if __name__ == "__main__":
     try:
         unified_input_dir = "./inputs"
-        
         audio_repo = AudioRepository(search_dir=unified_input_dir)
         text_parser = TextParser(search_dir=unified_input_dir)
         
@@ -154,4 +207,4 @@ if __name__ == "__main__":
         generator.generate_import_file(output_path="./anki_import.txt")
         
     except Exception as e:
-        print(f"[Error] Execution failed: {e}")
+        print(f"[Error] Falha na execução: {e}")
