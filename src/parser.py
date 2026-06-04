@@ -6,13 +6,13 @@ from typing import List, Tuple
 from pypdf import PdfReader
 
 class AudioRepository:
-    """Handles scanning, validating, and sorting audio files by their numeric prefix."""
     def __init__(self, search_dir: str):
         self.search_dir = search_dir
 
     def _get_numeric_prefix(self, filename: str) -> int:
         match = re.match(r'^(\d+)\s*-\s*', filename)
-        if match: return int(match.group(1))
+        if match: 
+            return int(match.group(1))
         return float('inf')
 
     def get_sorted_audio_files(self) -> List[str]:
@@ -29,7 +29,6 @@ class AudioRepository:
 
 
 class AnkiMediaSyncer:
-    """Detects the host OS, resolves the core collection.media path, and automates asset syncing."""
     def __init__(self, profile_name: str = "User 1", log_callback=print):
         self.profile_name = profile_name
         self.log_callback = log_callback
@@ -55,13 +54,10 @@ class AnkiMediaSyncer:
             target_dir = self.resolve_media_dir()
             
             if not target_dir or not os.path.exists(target_dir):
-                self.log_callback(f"[Warning] Anki target directory not found at: '{target_dir}'")
-                self.log_callback("-> Skipping auto-copy. You will need to manually move the MP3 files.")
+                self.log_callback("[Warning] Anki collection.media directory could not be located automatically.")
                 return False
                 
-            self.log_callback(f"[Syncer] Target verified: {target_dir}")
             copied_count = 0
-            
             for filename in file_list:
                 source_path = os.path.join(source_dir, filename)
                 target_path = os.path.join(target_dir, filename)
@@ -70,25 +66,26 @@ class AnkiMediaSyncer:
                     shutil.copy2(source_path, target_path)
                     copied_count += 1
                     
-            self.log_callback(f"[Success] Synced {copied_count} new audio assets directly to Anki.")
+            self.log_callback(f"🎵 [Audio] Synced {copied_count} sound files directly into Anki.")
             return True
         except Exception as e:
-            self.log_callback(f"[Warning] Media sync operation failed: {e}")
+            self.log_callback(f"[Warning] Failed to sync media assets: {e}")
             return False
 
 
 class TextParser:
-    """Extracts clean English-Portuguese sentence pairs applying pre-filtering and a State Machine."""
     def __init__(self, search_dir: str, log_callback=print):
         self.search_dir = search_dir
         self.log_callback = log_callback
 
     def _is_english_sentence(self, text: str) -> bool:
         cleaned = text.strip()
-        if not cleaned or cleaned.startswith('---'): return False
+        if not cleaned or cleaned.startswith('---'): 
+            return False
 
         words = set(re.findall(r'\b[a-zà-ÿ́’\']+\b', cleaned.lower()))
-        if not words: return False
+        if not words: 
+            return False
 
         english_anchors = {
             'the', 'it', 'i', 'you', 'he', 'she', 'we', 'they', 'is', 'was', 'were', 
@@ -132,7 +129,8 @@ class TextParser:
         return english_score > 0 and english_score > portuguese_score
 
     def _apply_en_formatting(self, text: str, pv_name: str) -> str:
-        if not pv_name or " " not in pv_name: return text
+        if not pv_name or " " not in pv_name: 
+            return text
             
         parts = pv_name.split(maxsplit=1)
         verb_base = parts[0].lower()
@@ -163,7 +161,8 @@ class TextParser:
         return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
 
     def _apply_pt_formatting(self, text: str, pv_name: str) -> str:
-        if not pv_name: return text
+        if not pv_name: 
+            return text
         
         pt_registry = {
             "DRINK UP": r"\b(beber\studo|bebeu\studo|beber\stodo|bebeu\stodo|beba\stodo|entorne\so\scopo|entornar\so\scopo|beber|bebeu|beba|entorne|entornar|bebeu\stodo)\b",
@@ -172,7 +171,8 @@ class TextParser:
         }
         
         pattern = pt_registry.get(pv_name.upper())
-        if not pattern: return text
+        if not pattern: 
+            return text
             
         return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
 
@@ -189,17 +189,19 @@ class TextParser:
             full_text = ""
 
             if filename.lower().endswith('.pdf'):
-                self.log_callback(f"[Processor] Reading PDF document: {filename}")
+                self.log_callback(f"📄 [Processing] Analyzing source document: {filename}")
                 reader = PdfReader(file_path)
                 for page in reader.pages:
                     page_text = page.extract_text()
-                    if page_text: full_text += " " + page_text
+                    if page_text: 
+                        full_text += " " + page_text
             else:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     full_text = f.read()
 
             footer_match = re.search(r'(?i)(bons estudos|nosso site:)', full_text)
-            if footer_match: full_text = full_text[:footer_match.start()]
+            if footer_match: 
+                full_text = full_text[:footer_match.start()]
             full_text = re.sub(r'(?i)phrasal verb:\s*[a-z\s]+', '', full_text)
             full_text = re.sub(r'(www\.[^\s]+|https?://[^\s]+)', '', full_text)
 
@@ -236,7 +238,8 @@ class TextParser:
                             re.match(r'^\d+\s*[-–—]', chunk) or
                             (chunk.startswith('(') and chunk.endswith(')'))
                         )
-                        if not is_noise: current_pt.append(chunk)
+                        if not is_noise: 
+                            current_pt.append(chunk)
                             
             if current_en and current_pt:
                 english_txt = " ".join(current_en)
@@ -249,7 +252,6 @@ class TextParser:
 
 
 class AnkiPackageGenerator:
-    """Binds text pairs and audio filenames together into an Anki-readable flashcard file."""
     def __init__(self, audio_repo: AudioRepository, text_parser: TextParser, log_callback=print):
         self.audio_repo = audio_repo
         self.text_parser = text_parser
@@ -260,7 +262,6 @@ class AnkiPackageGenerator:
         text_pairs = self.text_parser.extract_pairs()
 
         if not text_pairs:
-            self.log_callback("[Error] No text pairs were successfully extracted.")
             return []
 
         total_cards = min(len(audio_files), len(text_pairs))
@@ -276,15 +277,11 @@ class AnkiPackageGenerator:
                 out_file.write(f"{front_field}\t{back_field}\n")
                 used_audio_files.append(audio_filename)
                 
-        self.log_callback(f"[Success] Generated mapping file inside '{output_path}'")
+        self.log_callback(f"💾 [Saved] Anki import file compiled successfully at:\n   '{output_path}'")
         return used_audio_files
 
 
-# =====================================================================
-#  UI EXPOSURE LAYER (The Controller Entrypoint)
-# =====================================================================
 def execute_pipeline(inputs_dir: str, anki_profile: str = "User 1", log_callback=print, output_path: str = None) -> bool:
-    """Core orchestration engine decoupled from hardcoded terminal environments."""
     try:
         if not os.path.exists(inputs_dir):
             log_callback(f"[Error] Selected directory does not exist: {inputs_dir}")
@@ -293,7 +290,6 @@ def execute_pipeline(inputs_dir: str, anki_profile: str = "User 1", log_callback
         audio_repo = AudioRepository(search_dir=inputs_dir)
         text_parser = TextParser(search_dir=inputs_dir, log_callback=log_callback)
         
-        # === SE O USUÁRIO NÃO PASSOU CAMINHO (FALLBACK/TESTES), GERA AUTOMATICAMENTE ===
         if not output_path:
             doc_files = [f for f in os.listdir(inputs_dir) if f.lower().endswith(('.txt', '.pdf'))]
             if not doc_files:
@@ -302,7 +298,6 @@ def execute_pipeline(inputs_dir: str, anki_profile: str = "User 1", log_callback
             pv_name = doc_files[0].split(" - ")[0].strip()
             parent_dir = os.path.dirname(os.path.abspath(inputs_dir))
             output_path = os.path.join(parent_dir, f"{pv_name}.txt")
-        # ==============================================================================
         
         generator = AnkiPackageGenerator(audio_repo, text_parser, log_callback=log_callback)
         active_audios = generator.generate_import_file(output_path=output_path)
@@ -311,14 +306,7 @@ def execute_pipeline(inputs_dir: str, anki_profile: str = "User 1", log_callback
             syncer = AnkiMediaSyncer(profile_name=anki_profile, log_callback=log_callback)
             syncer.sync_audio_assets(source_dir=inputs_dir, file_list=active_audios)
             
-        log_callback("--- All Pipeline Tasks Completed Successfully ---")
         return True
     except Exception as e:
-        log_callback(f"[Error] Pipeline execution crash: {e}")
+        log_callback(f"[Error] Critical pipeline failure: {e}")
         return False
-
-
-if __name__ == "__main__":
-    # Backwards compatibility check: allows CLI execution if ran directly
-    print("[CLI] Running in fallback standalone script mode...")
-    execute_pipeline(inputs_dir="./inputs", anki_profile="User 1")
