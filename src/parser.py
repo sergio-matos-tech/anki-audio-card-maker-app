@@ -101,7 +101,8 @@ class TextParser:
             'feel', 'try', 'leave', 'call', 'drink', 'drank', 'okay', 'yes', 'no', 
             'let', 'lets', 'dear', 'kid', 'boy', 'girl', 'time', 'home', 'back', 
             'just', 'only', 'much', 'many', 'very', 'too', 'also', 'well', 'way', 
-            'even', 'new', 'good', 'bad', 'great', 'right', 'really', 'us', 'ill', 'turn', 'once', 'more'
+            'even', 'new', 'good', 'bad', 'great', 'right', 'really', 'us', 'ill', 'turn', 'once', 'more',
+            'as', 'if', 'by', 'about', 'from', 'at'
         }
         
         portuguese_anchors = {
@@ -129,36 +130,47 @@ class TextParser:
         return english_score > 0 and english_score > portuguese_score
 
     def _apply_en_formatting(self, text: str, pv_name: str) -> str:
-        if not pv_name or " " not in pv_name: 
+        if not pv_name: 
             return text
             
-        parts = pv_name.split(maxsplit=1)
-        verb_base = parts[0].lower()
-        particle = parts[1].lower()
+        safe_pv = re.escape(pv_name).replace(r'\ ', r'\s+')
+        direct_pattern = rf"\b({safe_pv})\b"
         
-        inflections = {
-            "drink": ["drink", "drank", "drunk", "drinking", "drinks"],
-            "work": ["work", "worked", "working", "works"],
-            "break": ["break", "broke", "broken", "breaking", "breaks"],
-            "call": ["call", "called", "calling", "calls"],
-            "carry": ["carry", "carried", "carrying", "carries"],
-            "get": ["get", "got", "gotten", "getting", "gets"],
-            "give": ["give", "gave", "given", "giving", "gives"],
-            "go": ["go", "went", "gone", "going", "goes"],
-            "keep": ["keep", "kept", "keeping", "keeps"],
-            "look": ["look", "looked", "looking", "looks"],
-            "make": ["make", "made", "making", "makes"],
-            "put": ["put", "putting", "puts"],
-            "run": ["run", "ran", "running", "runs"],
-            "take": ["take", "took", "taken", "taking", "takes"],
-            "turn": ["turn", "turned", "turning", "turns"],
-        }
-        
-        forms = inflections.get(verb_base, [verb_base, verb_base + "ed", verb_base + "ing", verb_base + "s"])
-        verb_pattern = "|".join(forms)
-        
-        pattern = rf"\b({verb_pattern})\b[\w\s—’']{{0,30}}\b{particle}\b"
-        return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
+        if re.search(direct_pattern, text, flags=re.IGNORECASE):
+            return re.sub(direct_pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
+            
+        if " " in pv_name:
+            parts = pv_name.split(maxsplit=1)
+            verb_base = parts[0].lower()
+            particle = parts[1].lower()
+            
+            inflections = {
+                "drink": ["drink", "drank", "drunk", "drinking", "drinks"],
+                "work": ["work", "worked", "working", "works"],
+                "break": ["break", "broke", "broken", "breaking", "breaks"],
+                "call": ["call", "called", "calling", "calls"],
+                "carry": ["carry", "carried", "carrying", "carries"],
+                "get": ["get", "got", "gotten", "getting", "gets"],
+                "give": ["give", "gave", "given", "giving", "gives"],
+                "go": ["go", "went", "gone", "going", "goes"],
+                "keep": ["keep", "kept", "keeping", "keeps"],
+                "look": ["look", "looked", "looking", "looks"],
+                "make": ["make", "made", "making", "makes"],
+                "put": ["put", "putting", "puts"],
+                "run": ["run", "ran", "running", "runs"],
+                "take": ["take", "took", "taken", "taking", "takes"],
+                "turn": ["turn", "turned", "turning", "turns"],
+            }
+            
+            forms = inflections.get(verb_base, [verb_base, verb_base + "ed", verb_base + "ing", verb_base + "s"])
+            verb_pattern = "|".join(forms)
+            
+            safe_particle = re.escape(particle).replace(r'\ ', r'\s+')
+            pattern = rf"\b({verb_pattern})\b[\w\s—’']{{0,30}}\b{safe_particle}\b"
+            
+            return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
+            
+        return text
 
     def _apply_pt_formatting(self, text: str, pv_name: str) -> str:
         if not pv_name: 
@@ -184,7 +196,7 @@ class TextParser:
         files = [f for f in os.listdir(self.search_dir) if f.lower().endswith(('.txt', '.pdf'))]
         
         for filename in sorted(files):
-            pv_name = filename.split(" - ")[0].strip() if " - " in filename else ""
+            fallback_name = filename.split(" - ")[0].strip() if " - " in filename else ""
             file_path = os.path.join(self.search_dir, filename)
             full_text = ""
 
@@ -199,10 +211,22 @@ class TextParser:
                 with open(file_path, 'r', encoding='utf-8') as f:
                     full_text = f.read()
 
+            # --- DYNAMIC TARGET EXTRACTION ---
+            # Reads the PDF header directly to find the study target (e.g., "ALL BUT" or "BOTTOM OUT")
+            active_target = fallback_name
+            target_match = re.search(r'(?:Phrasal [Vv]erb|Estruturas do ingl[êe]s):\s*([A-Z\s\']+)', full_text)
+            if target_match:
+                active_target = target_match.group(1).strip()
+
             footer_match = re.search(r'(?i)(bons estudos|nosso site:)', full_text)
             if footer_match: 
                 full_text = full_text[:footer_match.start()]
-            full_text = re.sub(r'(?i)phrasal verb:\s*[a-z\s]+', '', full_text)
+                
+            if active_target:
+                pattern = rf'(?i)(phrasal verb|expressão|estruturas do inglês)[\s:\-]*{re.escape(active_target)}'
+                full_text = re.sub(pattern, '', full_text)
+                
+            full_text = re.sub(r'(?i)^(phrasal verb|expressão|estruturas do inglês).*$', '', full_text, flags=re.MULTILINE)
             full_text = re.sub(r'(www\.[^\s]+|https?://[^\s]+)', '', full_text)
 
             sanitized_text = re.sub(r'([.!?:][)"’]?)([A-Za-zÀ-ÿ(])', r'\1 \2', full_text)
@@ -214,38 +238,53 @@ class TextParser:
             current_pt = []
             
             for chunk in chunks:
+                chunk = re.sub(r'^\d+\s*[-–—.)]\s*', '', chunk).strip()
+                
+                if not re.search(r'[a-zA-ZÀ-ÿ]', chunk):
+                    continue
+                
+                is_noise = (
+                    "mairovergara" in chunk.lower() or 
+                    "conheça mais" in chunk.lower() or
+                    "leia o post" in chunk.lower() or
+                    "nosso site" in chunk.lower() or
+                    "youtube" in chunk.lower() or
+                    "aprenda inglês" in chunk.lower() or
+                    "facebook" in chunk.lower() or
+                    "linkedin" in chunk.lower() or
+                    "traduzid" in chunk.lower() or
+                    "expressão" in chunk.lower() or
+                    "estruturas do" in chunk.lower() or
+                    "comecemos" in chunk.lower() or
+                    "veja a nossa" in chunk.lower() or
+                    "agora, veja" in chunk.lower() or
+                    "bons estudos" in chunk.lower() or
+                    (chunk.startswith('(') and chunk.endswith(')'))
+                )
+                
+                if is_noise:
+                    continue
+
                 if self._is_english_sentence(chunk):
                     if current_pt:
                         english_txt = " ".join(current_en)
                         portuguese_txt = " ".join(current_pt)
-                        english_txt = self._apply_en_formatting(english_txt, pv_name)
-                        portuguese_txt = self._apply_pt_formatting(portuguese_txt, pv_name)
+                        # Apply formatting using the dynamic target
+                        english_txt = self._apply_en_formatting(english_txt, active_target)
+                        portuguese_txt = self._apply_pt_formatting(portuguese_txt, active_target)
                         pairs.append((english_txt, portuguese_txt))
                         current_en = []
                         current_pt = []
                     current_en.append(chunk)
                 else:
                     if current_en:
-                        is_noise = (
-                            "mairovergara" in chunk.lower() or 
-                            "conheça mais" in chunk.lower() or
-                            "leia o post" in chunk.lower() or
-                            "nosso site" in chunk.lower() or
-                            "youtube" in chunk.lower() or
-                            "aprenda inglês" in chunk.lower() or
-                            "facebook" in chunk.lower() or
-                            "linkedin" in chunk.lower() or
-                            re.match(r'^\d+\s*[-–—]', chunk) or
-                            (chunk.startswith('(') and chunk.endswith(')'))
-                        )
-                        if not is_noise: 
-                            current_pt.append(chunk)
-                            
+                        current_pt.append(chunk)
+                        
             if current_en and current_pt:
                 english_txt = " ".join(current_en)
                 portuguese_txt = " ".join(current_pt)
-                english_txt = self._apply_en_formatting(english_txt, pv_name)
-                portuguese_txt = self._apply_pt_formatting(portuguese_txt, pv_name)
+                english_txt = self._apply_en_formatting(english_txt, active_target)
+                portuguese_txt = self._apply_pt_formatting(portuguese_txt, active_target)
                 pairs.append((english_txt, portuguese_txt))
                 
         return pairs
