@@ -1,14 +1,16 @@
 # Ignore local virtual environment
 .venv/
 
-# Ignore local raw data and audio files
+# Ignore local raw data, audio files, and generated text outputs
 inputs/
 *.txt
 !requirements.txt
 *.csv
 
-# Ignore PyInstaller intermediate build files
+# Ignore PyInstaller intermediate build files, output binaries, and specs
 build/
+dist/
+*.spec
 
 # Ignore Python cache files
 __pycache__/
@@ -17,3 +19,4 @@ __pycache__/
 # Ignore OS-specific metadata
 Thumbs.db
 Desktop.ini
+.DS_Store
