@@ -9,7 +9,6 @@ inputs/
 
 # Ignore PyInstaller intermediate build files, output binaries, and specs
 build/
-dist/
 *.spec
 
 # Ignore Python cache files
