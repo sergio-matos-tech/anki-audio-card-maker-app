@@ -62,9 +62,8 @@ class AnkiMediaSyncer:
                 source_path = os.path.join(source_dir, filename)
                 target_path = os.path.join(target_dir, filename)
                 
-                if not os.path.exists(target_path):
-                    shutil.copy2(source_path, target_path)
-                    copied_count += 1
+                shutil.copy2(source_path, target_path)
+                copied_count += 1
                     
             self.log_callback(f"🎵 [Audio] Synced {copied_count} sound files directly into Anki.")
             return True
@@ -130,63 +129,20 @@ class TextParser:
         return english_score > 0 and english_score > portuguese_score
 
     def _apply_en_formatting(self, text: str, pv_name: str) -> str:
-        if not pv_name: 
-            return text
-            
-        safe_pv = re.escape(pv_name).replace(r'\ ', r'\s+')
-        direct_pattern = rf"\b({safe_pv})\b"
-        
-        if re.search(direct_pattern, text, flags=re.IGNORECASE):
-            return re.sub(direct_pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
-            
-        if " " in pv_name:
-            parts = pv_name.split(maxsplit=1)
-            verb_base = parts[0].lower()
-            particle = parts[1].lower()
-            
-            inflections = {
-                "drink": ["drink", "drank", "drunk", "drinking", "drinks"],
-                "work": ["work", "worked", "working", "works"],
-                "break": ["break", "broke", "broken", "breaking", "breaks"],
-                "call": ["call", "called", "calling", "calls"],
-                "carry": ["carry", "carried", "carrying", "carries"],
-                "get": ["get", "got", "gotten", "getting", "gets"],
-                "give": ["give", "gave", "given", "giving", "gives"],
-                "go": ["go", "went", "gone", "going", "goes"],
-                "keep": ["keep", "kept", "keeping", "keeps"],
-                "look": ["look", "looked", "looking", "looks"],
-                "make": ["make", "made", "making", "makes"],
-                "put": ["put", "putting", "puts"],
-                "run": ["run", "ran", "running", "runs"],
-                "take": ["take", "took", "taken", "taking", "takes"],
-                "turn": ["turn", "turned", "turning", "turns"],
-            }
-            
-            forms = inflections.get(verb_base, [verb_base, verb_base + "ed", verb_base + "ing", verb_base + "s"])
-            verb_pattern = "|".join(forms)
-            
-            safe_particle = re.escape(particle).replace(r'\ ', r'\s+')
-            pattern = rf"\b({verb_pattern})\b[\w\s—’']{{0,30}}\b{safe_particle}\b"
-            
-            return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
-            
         return text
 
     def _apply_pt_formatting(self, text: str, pv_name: str) -> str:
-        if not pv_name: 
-            return text
-        
-        pt_registry = {
-            "DRINK UP": r"\b(beber\studo|bebeu\studo|beber\stodo|bebeu\stodo|beba\stodo|entorne\so\scopo|entornar\so\scopo|beber|bebeu|beba|entorne|entornar|bebeu\stodo)\b",
-            "WORK UP": r"\b(gerar|abriu|abremos|juntar|começou\sa\ssuar|abrir|ficado\scom|chegar\sa\ssuar|preparou|arrumar|progrediu)\b",
-            "PUT THROUGH": r"\b(colocados|passar\spor|submeter|enviar)\b"
-        }
-        
-        pattern = pt_registry.get(pv_name.upper())
-        if not pattern: 
-            return text
-            
-        return re.sub(pattern, r'<u><b>\g<0></b></u>', text, flags=re.IGNORECASE)
+        return text
+
+    def _extract_section_target(self, chunk: str) -> str:
+        heading_match = re.match(
+            r'^\d+\s*[•\*\-–—]?\s*(?:Comecemos com|Começamos com|Agora é a vez de|Agora e a vez de|Now it(?:\'s)? time for|Time for|Let\'s start with)\s+(.+?):$',
+            chunk,
+            flags=re.IGNORECASE,
+        )
+        if heading_match:
+            return heading_match.group(1).strip()
+        return ""
 
     def extract_pairs(self) -> List[Tuple[str, str]]:
         if not os.path.exists(self.search_dir):
@@ -196,7 +152,7 @@ class TextParser:
         files = [f for f in os.listdir(self.search_dir) if f.lower().endswith(('.txt', '.pdf'))]
         
         for filename in sorted(files):
-            fallback_name = filename.split(" - ")[0].strip() if " - " in filename else ""
+            fallback_name = os.path.splitext(filename)[0].split(" - ")[0].strip()
             file_path = os.path.join(self.search_dir, filename)
             full_text = ""
 
@@ -238,6 +194,12 @@ class TextParser:
             current_pt = []
             
             for chunk in chunks:
+                chunk = chunk.strip()
+                heading_target = self._extract_section_target(chunk)
+                if heading_target:
+                    active_target = heading_target
+                    continue
+
                 chunk = re.sub(r'^\d+\s*[-–—.)]\s*', '', chunk).strip()
                 
                 if not re.search(r'[a-zA-ZÀ-ÿ]', chunk):
@@ -334,7 +296,7 @@ def execute_pipeline(inputs_dir: str, anki_profile: str = "User 1", log_callback
             if not doc_files:
                 log_callback("[Error] No valid .pdf or .txt source documents found in directory.")
                 return False
-            pv_name = doc_files[0].split(" - ")[0].strip()
+            pv_name = os.path.splitext(doc_files[0])[0].split(" - ")[0].strip()
             parent_dir = os.path.dirname(os.path.abspath(inputs_dir))
             output_path = os.path.join(parent_dir, f"{pv_name}.txt")
         
@@ -343,8 +305,12 @@ def execute_pipeline(inputs_dir: str, anki_profile: str = "User 1", log_callback
         
         if active_audios:
             syncer = AnkiMediaSyncer(profile_name=anki_profile, log_callback=log_callback)
-            syncer.sync_audio_assets(source_dir=inputs_dir, file_list=active_audios)
-            
+            media_synced = syncer.sync_audio_assets(source_dir=inputs_dir, file_list=active_audios)
+            if media_synced:
+                log_callback(f"[Done] Created {len(active_audios)} cards from '{inputs_dir}' and synced audio into Anki profile '{anki_profile}'.")
+            else:
+                log_callback(f"[Done] Created {len(active_audios)} cards from '{inputs_dir}' and wrote the import file to '{output_path}', but audio sync could not be confirmed.")
+        
         return True
     except Exception as e:
         log_callback(f"[Error] Critical pipeline failure: {e}")
